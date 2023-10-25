@@ -7,9 +7,9 @@
   "scripts": {
     "cashc": "cashc ./covenants/height_oracle.cash --output ./src/height_oracle.json",
     "start:CHIPNET": "ts-node scripts/cli.ts update-height --network=CHIPNET  --token-category=9e19e9aa75926e9329e6f30a6634ee7ad3cc9cc166df6d34284c1e2b5b47eaf3 --receiver=? --exit=false",
-    "pm2:CHIPNET": "pm2 --name=bch-height-CHIPNET start npm -- run start:CHIPNET",
+    "pm2:CHIPNET": "pm2 --name=BCH-HEIGHT-ORACLE-CHIPNET start npm -- run start:CHIPNET",
     "start:MAINNET": "ts-node scripts/cli.ts update-height --network=MAINNET  --token-category=f10fe0965f4b7d1b9666783bbe25ec031a876b11997e812d27d534d127db1f32 --receiver=? --exit=false",
-    "pm2": "pm2 --name=bch-height-MAINNET start npm -- run start:MAINNET"
+    "pm2": "pm2 --name=BCH-HEIGHT-ORACLE-MAINNET start npm -- run start:MAINNET"
   },
   "devDependencies": {
     "@tsconfig/node19": "^2.0.1",

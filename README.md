@@ -48,12 +48,12 @@ With bounty hunters looking for profit, oracle can almost always provide the lat
 
 We have deployed the height oracle covenant on BCH `chipnet` and `mainnet` respectively:
 
-- BCH Chipnet 
+- BCH Chipnet
   - Covenant Address: `bchtest:pqq0y9k6wr6cdud4x6fp9u889sk0t7vv4c4m3c8g3n`
   - NFT Category: `9e19e9aa75926e9329e6f30a6634ee7ad3cc9cc166df6d34284c1e2b5b47eaf3`
 - BCH Mainnet
-    - Covenant Address: `bitcoincash:pqq0y9k6wr6cdud4x6fp9u889sk0t7vv4c3f4l9lk0`
-    - NFT Category: `f10fe0965f4b7d1b9666783bbe25ec031a876b11997e812d27d534d127db1f32`
+  - Covenant Address: `bitcoincash:pqq0y9k6wr6cdud4x6fp9u889sk0t7vv4c3f4l9lk0`
+  - NFT Category: `f10fe0965f4b7d1b9666783bbe25ec031a876b11997e812d27d534d127db1f32`
 
 Developers can use the above covenants directly to read BCH block heights inside smart contracts.
 
@@ -131,8 +131,14 @@ npm install -g pm2
   ```bash
   receiver=<your-cash-address> npm run pm2
   ```
-  
+
 #### Stop Bot
-```bash
-pm2 stop all
-```
+- BCH Chipnet
+  ```bash
+  pm2 stop BCH-HEIGHT-ORACLE-CHIPNET
+  ```
+
+- BCH Mainnet
+  ```bash
+  pm2 stop BCH-HEIGHT-ORACLE-MAINNET
+  ```
