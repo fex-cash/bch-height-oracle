@@ -1,0 +1,31 @@
+{
+  "contractName": "BlockHeightOracle",
+  "constructorInputs": [
+    {
+      "name": "rewardPerBlock",
+      "type": "int"
+    },
+    {
+      "name": "fee",
+      "type": "int"
+    }
+  ],
+  "abi": [
+    {
+      "name": "spend",
+      "inputs": [
+        {
+          "name": "height",
+          "type": "int"
+        }
+      ]
+    }
+  ],
+  "bytecode": "OP_2 OP_PICK 0065cd1d OP_LESSTHAN OP_VERIFY OP_2 OP_PICK OP_CHECKLOCKTIMEVERIFY OP_DROP OP_INPUTINDEX OP_UTXOBYTECODE OP_INPUTINDEX OP_OUTPUTBYTECODE OP_EQUALVERIFY OP_2 OP_PICK OP_INPUTINDEX OP_UTXOTOKENCOMMITMENT OP_BIN2NUM OP_SUB OP_DUP OP_0 OP_GREATERTHANOREQUAL OP_VERIFY OP_DUP OP_0 OP_NUMEQUAL OP_IF OP_INPUTINDEX OP_UTXOVALUE 0065cd1d OP_GREATERTHAN OP_IF OP_0 OP_3 OP_ROLL OP_DROP OP_SWAP OP_TOALTSTACK OP_SWAP OP_FROMALTSTACK OP_ENDIF OP_INPUTINDEX OP_UTXOVALUE OP_3 OP_PICK OP_ADD OP_INPUTINDEX OP_OUTPUTVALUE OP_LESSTHANOREQUAL OP_VERIFY OP_ELSE OP_INPUTINDEX OP_UTXOVALUE OP_2 OP_PICK OP_2 OP_PICK OP_MUL OP_SUB OP_INPUTINDEX OP_OUTPUTVALUE OP_LESSTHANOREQUAL OP_VERIFY OP_ENDIF OP_3 OP_ROLL OP_INPUTINDEX OP_OUTPUTTOKENCOMMITMENT OP_BIN2NUM OP_NUMEQUAL OP_NIP OP_NIP OP_NIP",
+  "source": "pragma cashscript ^0.9.0;\n\ncontract BlockHeightOracle(int rewardPerBlock, int fee) {\n    function spend(int height) {\n        require(height < 500000000);\n        require(tx.time >= height);\n        require(tx.inputs[this.activeInputIndex].lockingBytecode == tx.outputs[this.activeInputIndex].lockingBytecode);\n        int delta = height - int(tx.inputs[this.activeInputIndex].nftCommitment);\n        require(delta >= 0);\n        if(delta == 0) {\n            if(tx.inputs[this.activeInputIndex].value > 500000000) {\n                fee = 0;\n            }\n            require(tx.inputs[this.activeInputIndex].value + fee <= tx.outputs[this.activeInputIndex].value);\n        } else {\n            require(tx.inputs[this.activeInputIndex].value - rewardPerBlock * delta <= tx.outputs[this.activeInputIndex].value);\n        }\n        require(height == int(tx.outputs[this.activeInputIndex].nftCommitment));\n    }\n}",
+  "compiler": {
+    "name": "cashc",
+    "version": "0.9.1"
+  },
+  "updatedAt": "2023-10-19T09:28:13.614Z"
+}

@@ -1,0 +1,407 @@
+<!doctype html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,typography,aspect-ratio,line-clamp"></script>
+    <script src="https://cdn.mainnet.cash/mainnet-2.2.5.js"
+        integrity="sha384-RrFMKtXQroWNZV6mP8XFAV2FOIFsEPSAfzd5e7V1H1qSnLg8wwO2bkLb5URNOv+k"
+        crossorigin="anonymous"></script>
+    <script src="https://cdn.mainnet.cash/contract/contract-2.2.5.js"
+        integrity="sha384-0+mqq/sJ3NSWb6rJWjkNirr8TvHU3dEJyHvHmm1ZfNVytR32mGDZnh+2EiDQUcvc"
+        crossorigin="anonymous"></script>
+    <script>
+        const REWARD_PER_BLOCK = 2000n
+        const DEFAULT_USER_FEE = 20000n
+        const DEFAULT_MINER_FEE = 546n
+    </script>
+    <script>
+        const bigIntToVmNumber = (integer) => {
+            if (integer === 0n) {
+                return new Uint8Array();
+            }
+            const bytes = [];
+            const isNegative = integer < 0;
+            const byteStates = 0xff;
+            const bitsPerByte = 8;
+            // eslint-disable-next-line functional/no-let
+            let remaining = isNegative ? -integer : integer;
+            // eslint-disable-next-line functional/no-loop-statement
+            while (remaining > 0) {
+                // eslint-disable-next-line functional/no-expression-statement, functional/immutable-data, no-bitwise
+                bytes.push(Number(remaining & BigInt(byteStates)));
+                // eslint-disable-next-line functional/no-expression-statement, no-bitwise
+                remaining >>= BigInt(bitsPerByte);
+            }
+            const signFlippingByte = 0x80;
+            // eslint-disable-next-line no-bitwise, functional/no-conditional-statement, @typescript-eslint/no-non-null-assertion
+            if ((bytes[bytes.length - 1] & signFlippingByte) > 0) {
+                // eslint-disable-next-line functional/no-expression-statement, functional/immutable-data
+                bytes.push(isNegative ? signFlippingByte : 0x00);
+                // eslint-disable-next-line functional/no-conditional-statement
+            }
+            else if (isNegative) {
+                // eslint-disable-next-line functional/no-expression-statement, functional/immutable-data, no-bitwise
+                bytes[bytes.length - 1] |= signFlippingByte;
+            }
+            return new Uint8Array(bytes);
+        };
+
+        const hexByteWidth = 2;
+        const hexadecimal = 16;
+        const binToHex = (bytes) => bytes.reduce((str, byte) => str + byte.toString(hexadecimal).padStart(hexByteWidth, '0'), '');
+
+        function height2Commitment(index) {
+            if (index === 0) {
+                return '00'
+            }
+            return binToHex(bigIntToVmNumber(BigInt(index)))
+        }
+
+        function commitment2Height(commitment) {
+            function reverseHexBytes(hexStr) {
+                if (hexStr === '') {
+                    return '';
+                }
+                if (hexStr.length % 2 !== 0) {
+                    hexStr = '0' + hexStr;
+                }
+                return hexStr.match(/[a-fA-F0-9]{2}/g).reverse().join('');
+            }
+            return Number(`0x${reverseHexBytes(commitment)}`)
+        }
+
+        function mnUtxoToCS(x) {
+            const result = {
+                txid: x.txid,
+                vout: x.vout,
+                satoshis: BigInt(x.satoshis),
+            };
+            if (x.token) {
+                result.token = {
+                    amount: BigInt(x.token.amount || 0),
+                    category: x.token.tokenId,
+                }
+                if (x.token.commitment) {
+                    result.token.nft = {
+                        capability: x.token.capability,
+                        commitment: x.token.commitment,
+                    }
+                }
+            }
+            return result;
+        }
+
+        function createAddressExploreUrl(address) {
+            if (network === Network.MAINNET) {
+                return `https://explorer.bitcoinunlimited.info/address/${address}`
+            }
+            return `https://chipnet.imaginary.cash/address/${address}`
+        }
+
+        function createTxExploreUrl(tx) {
+            if (network === Network.MAINNET) {
+                return `https://explorer.bitcoinunlimited.info/tx/${tx}`
+            }
+            return `https://chipnet.imaginary.cash/tx/${tx}`
+        }
+
+        function createBlockExploreUrl(block) {
+            if (network === Network.MAINNET) {
+                return `https://explorer.bitcoinunlimited.info/block/${block}`
+            }
+            return `https://chipnet.imaginary.cash/block/${block}`
+        }
+
+    </script>
+    <script type="module">
+        async function onLoad() {
+            const contract = new Contract(
+                `pragma cashscript ^0.8.0;
+                    contract BlockHeightOracle(int rewardPerBlock, int fee) {
+                        function spend(int height) {
+                            require(height < 500000000);
+                            require(tx.time >= height);
+                            require(tx.inputs[this.activeInputIndex].lockingBytecode == tx.outputs[this.activeInputIndex].lockingBytecode);
+                            int delta = height - int(tx.inputs[this.activeInputIndex].nftCommitment);
+                            require(delta >= 0);
+                            if(delta == 0) {
+                                if(tx.inputs[this.activeInputIndex].value > 500000000) {
+                                    fee = 0;
+                                }
+                                require(tx.inputs[this.activeInputIndex].value + fee <= tx.outputs[this.activeInputIndex].value);
+                            } else {
+                                require(tx.inputs[this.activeInputIndex].value - rewardPerBlock * delta <= tx.outputs[this.activeInputIndex].value);
+                            }
+                            require(height == int(tx.outputs[this.activeInputIndex].nftCommitment));
+                        }
+                    }`,
+                [REWARD_PER_BLOCK, DEFAULT_USER_FEE],
+                network === "Mainnet" ? Network.MAINNET : Network.TESTNET
+            )
+
+            // update html
+            document.getElementById("covenantAddress").innerText = contract.getDepositAddress()
+            const tokenCategory = network === "Mainnet" ? "f10fe0965f4b7d1b9666783bbe25ec031a876b11997e812d27d534d127db1f32" : "9e19e9aa75926e9329e6f30a6634ee7ad3cc9cc166df6d34284c1e2b5b47eaf3"
+            document.getElementById("tokenCategory").innerText = tokenCategory
+
+            const getHeights = () => {
+                return Promise.all([
+                    contract.getUtxos().then(utxos => utxos.find(x => x.token && x.token.tokenId === tokenCategory)).then(utxo => commitment2Height(utxo.token.commitment)),
+                    getNetworkProvider(network === "Mainnet" ? Network.MAINNET : Network.TESTNET).getBlockHeight(),
+                ])
+            }
+
+            const updateHeightDom = async () => {
+                const [oracleHeight, height] = await getHeights()
+                document.getElementById("oracleHeight").innerText = oracleHeight
+                document.getElementById("bchHeight").innerText = height
+                const updateDom = document.getElementById("update")
+                if (oracleHeight === height) {
+                    updateDom.classList.add("hidden")
+                } else {
+                    const reward = REWARD_PER_BLOCK * BigInt(height - oracleHeight)
+                    document.getElementById("update-btn").innerText = `Update(Reward: ${Number(reward - DEFAULT_MINER_FEE) / (10 ** 8)}BCH)`
+                    updateDom.classList.remove("hidden")
+                }
+            }
+
+
+            const updateHistory = async () => {
+                const provider = getNetworkProvider(network === "Mainnet" ? Network.MAINNET : Network.TESTNET)
+                const history = await provider.getHistory(contract.getDepositAddress())
+                let txs = await Promise.all(history.reverse().splice(0, 10).map(x => provider.getRawTransactionObject(x.tx_hash)))
+                txs = txs.filter(x => x.vout[0].tokenData.category === tokenCategory)
+                const records = await Promise.all(txs.map(async tx => {
+                    const utxo = tx.vout[0]
+                    const preTx = await provider.getRawTransactionObject(tx.vin[0].txid)
+                    console.log(preTx)
+                    const preUtxo = preTx.vout[tx.vin[0].vout]
+                    const oldHeight = commitment2Height(preUtxo.tokenData ? preUtxo.tokenData.nft.commitment : 0)
+                    return {
+                        txId: tx.txid,
+                        block: tx.locktime,
+                        date: tx.time ? new Date(tx.time * 1000).toISOString() : new Date().toISOString(),
+                        reward: oldHeight === 0 ? -utxo.value : (preUtxo.value * 1e10 - utxo.value * 1e10) / 1e10,
+                        reamingReward: utxo.value,
+                        oldHeight,
+                        newHeight: commitment2Height(utxo.tokenData.nft.commitment),
+                        operator: tx.vout[tx.vout.length - 1].scriptPubKey.addresses[0]
+                    }
+                }))
+                const innerHtml = records.map(r => `      <tr>
+                        <td
+                            class="border-b border-slate-100 dark:border-slate-700 p-4 pl-8 text-slate-500 dark:text-slate-400">
+                            ${r.date}</td>
+                        <td
+                            class="border-b border-slate-100 dark:border-slate-700 p-4 pl-8 text-slate-500 dark:text-slate-400">
+                            <a style="color:#93c5fd" target="_blank" href=${createTxExploreUrl(r.txId)}>${r.txId.slice(0, 20)}</a></td>
+                        <td
+                            class="border-b border-slate-100 dark:border-slate-700 p-4 text-slate-500 dark:text-slate-400">
+                            ${r.oldHeight}</td>
+                        <td
+                            class="border-b border-slate-100 dark:border-slate-700 p-4 pr-8 text-slate-500 dark:text-slate-400">
+                            ${r.newHeight}</td>
+                        <td
+                            class="border-b border-slate-100 dark:border-slate-700 p-4 pl-8 text-slate-500 dark:text-slate-400">
+                            ${r.reamingReward}</td>
+                        <td
+                            class="border-b border-slate-100 dark:border-slate-700 p-4 pl-8 text-slate-500 dark:text-slate-400">
+                            ${r.reward}</td>
+                        <td
+                            class="border-b border-slate-100 dark:border-slate-700 p-4 pl-8 text-slate-500 dark:text-slate-400">
+                            <a style="color:#93c5fd"  target="_blank" href=${createAddressExploreUrl(r.operator)}>${r.operator.slice(0, 20)}</a></td>
+                    </tr>`).join("")
+                document.getElementById("data").innerHTML = innerHtml
+                console.log(txs, records)
+            }
+            updateHeightDom()
+            updateHistory()
+            setInterval(updateHeightDom, 10000)
+
+
+
+            window.updateHeight = async () => {
+                const reveiver = document.getElementById("reveiver").value
+                if (!reveiver) {
+                    alert("Please input receiver")
+                    return
+                }
+
+                const [oracleHeight, height] = await getHeights()
+                const reward = REWARD_PER_BLOCK * BigInt(height - oracleHeight)
+                const utxo = await contract.getUtxos().then(utxos => utxos.find(x => x.token && x.token.tokenId === tokenCategory))
+                const reamingReward = BigInt(utxo.satoshis) - reward
+                let fn = contract.getContractFunction("spend");
+                let tx = await fn(BigInt(height)).from(mnUtxoToCS(utxo)).to(
+                    contract.getTokenDepositAddress(),
+                    reamingReward,
+                    {
+                        category: utxo.token.tokenId, amount: 0n,
+                        nft: { capability: utxo.token.capability, commitment: height2Commitment(height) }
+                    }
+                )
+                    .to(reveiver, reward - DEFAULT_MINER_FEE)
+                    .withHardcodedFee(DEFAULT_MINER_FEE)
+                    .withTime(height)
+                    .send();
+                console.log("tx: ", tx)
+                alert("Update success")
+                updateHeightDom()
+                updateHistory()
+            }
+        }
+
+        document.addEventListener("DOMContentLoaded", async (event) => {
+            globalThis.exports = globalThis.exports || {};
+            Object.assign(globalThis, await __mainnetPromise);
+
+            Object.assign(globalThis, await __contractPromise);
+            onLoad()
+        });
+    </script>
+</head>
+
+<body>
+    <div>
+        <div style="position: absolute;right: 0;">
+            <div class="relative mt-2 mr-5 float-right" style="width: 150px;">
+                <button type="button"
+                    onclick="document.getElementById('network-list').classList.contains('hidden') ? document.getElementById('network-list').classList.remove('hidden'): document.getElementById('network-list').classList.add('hidden')"
+                    class="relative w-full cursor-default rounded-md bg-white py-1.5 pl-3 pr-10 text-left text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 sm:text-sm sm:leading-6"
+                    aria-haspopup="listbox" aria-expanded="true" aria-labelledby="listbox-label">
+                    <span class="flex items-center">
+                        <span class="ml-3 block truncate" id="network"></span>
+                    </span>
+                    <span class="pointer-events-none absolute inset-y-0 right-0 ml-3 flex items-center pr-2">
+                        <svg class="h-5 w-5 text-gray-400" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                            <path fill-rule="evenodd"
+                                d="M10 3a.75.75 0 01.55.24l3.25 3.5a.75.75 0 11-1.1 1.02L10 4.852 7.3 7.76a.75.75 0 01-1.1-1.02l3.25-3.5A.75.75 0 0110 3zm-3.76 9.2a.75.75 0 011.06.04l2.7 2.908 2.7-2.908a.75.75 0 111.1 1.02l-3.25 3.5a.75.75 0 01-1.1 0l-3.25-3.5a.75.75 0 01.04-1.06z"
+                                clip-rule="evenodd" />
+                        </svg>
+                    </span>
+                </button>
+                <ul id="network-list"
+                    class="hidden absolute z-10 mt-1 max-h-56 w-full overflow-auto rounded-md bg-white py-1 text-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none sm:text-sm"
+                    tabindex="-1" role="listbox" aria-labelledby="listbox-label"
+                    aria-activedescendant="listbox-option-3">
+                    <li onclick="toggleNetwork()"
+                        class="text-gray-900 relative cursor-default select-none py-2 pl-3 pr-9" id="listbox-option-0"
+                        role="option">
+                        <div class="flex items-center">
+                            <span class="font-normal ml-3 block truncate" id="network-item"></span>
+                        </div>
+                    </li>
+                </ul>
+            </div>
+        </div>
+
+        <div style="text-align: center;font-size: 20px;" class="m-10">BCH Height Oracle</div>
+        <div style="width: 600px;" class="space-y-1 mx-auto">
+            <div class="border-b border-gray-900/10 pb-3">
+                <h2 class="text-base font-semibold leading-7 text-gray-900">Covenant Address</h2>
+                <p class="mt-1  leading-6 text-gray-600" id="covenantAddress"></p>
+            </div>
+            <div class="border-b border-gray-900/10 pb-3">
+                <h2 class="text-base font-semibold leading-7 text-gray-900">Token Category</h2>
+                <p class="mt-1  leading-6 text-gray-600" id="tokenCategory"></p>
+            </div>
+            <div class="border-b border-gray-900/10 pb-3">
+                <h2 class="text-base font-semibold leading-7 text-gray-900">Oracle height</h2>
+                <p class="mt-1  leading-1 text-gray-600" style="font-size: 60px;" id="oracleHeight"></p>
+            </div>
+            <div class="border-b border-gray-900/10 pb-3">
+                <h2 class="text-base font-semibold leading-7 text-gray-900">BCH height</h2>
+
+                <div class="flex">
+                    <p class="mt-1  leading-6 text-gray-600" id="bchHeight"> </p>
+                    <div id="update" class="flex flex-1 hidden">
+                        <div
+                            class="ml-3 flex-1 flex rounded-md shadow-sm ring-1 ring-inset ring-gray-300 focus-within:ring-2 focus-within:ring-inset focus-within:ring-indigo-600 sm:max-w-md">
+                            <span class="flex select-none items-center pl-3 text-gray-500 sm:text-sm">Receiver: </span>
+                            <input id="reveiver" type="text" name="username" id="username" autocomplete="username"
+                                class="block flex-1 border-0 bg-transparent py-1.5 pl-1 text-gray-900 placeholder:text-gray-400 focus:ring-0 sm:text-sm sm:leading-6"
+                                placeholder="This address will receive reward">
+                        </div>
+                        <button type="button" id="update-btn" onclick="updateHeight()"
+                            class="ml-1 inline-flex items-center rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">
+                            Update
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <h2 class="text-center text-2xl my-10">History</h2>
+        <div style="width: 1000px;" class="mx-auto">
+            <table class="border-collapse table-auto w-full text-sm">
+                <thead>
+                    <tr>
+                        <th
+                            class="border-b dark:border-slate-600 font-medium p-4 pl-8 pt-0 pb-3 text-slate-400 dark:text-slate-200 text-left">
+                            Time</th>
+                        <th
+                            class="border-b dark:border-slate-600 font-medium p-4 pl-8 pt-0 pb-3 text-slate-400 dark:text-slate-200 text-left">
+                            Tx</th>
+                        <th
+                            class="border-b dark:border-slate-600 font-medium p-4 pt-0 pb-3 text-slate-400 dark:text-slate-200 text-left">
+                            Old Height</th>
+                        <th
+                            class="border-b dark:border-slate-600 font-medium p-4 pr-8 pt-0 pb-3 text-slate-400 dark:text-slate-200 text-left">
+                            New Heigh</th>
+                        <th
+                            class="border-b dark:border-slate-600 font-medium p-4 pr-8 pt-0 pb-3 text-slate-400 dark:text-slate-200 text-left">
+                            Reaming Reward(BCH)</th>
+                        <th
+                            class="border-b dark:border-slate-600 font-medium p-4 pr-8 pt-0 pb-3 text-slate-400 dark:text-slate-200 text-left">
+                            Reward(BCH)</th>
+                        <th
+                            class="border-b dark:border-slate-600 font-medium p-4 pr-8 pt-0 pb-3 text-slate-400 dark:text-slate-200 text-left">
+                            Operator</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white dark:bg-slate-800" id="data">
+                    <!-- <tr>
+                        <td
+                            class="border-b border-slate-100 dark:border-slate-700 p-4 pl-8 text-slate-500 dark:text-slate-400">
+                            1</td>
+                        <td
+                            class="border-b border-slate-100 dark:border-slate-700 p-4 pl-8 text-slate-500 dark:text-slate-400">
+                            The Sliding Mr. Bones (Next Stop, Pottersville)</td>
+                        <td
+                            class="border-b border-slate-100 dark:border-slate-700 p-4 text-slate-500 dark:text-slate-400">
+                            Malcolm Lockyer</td>
+                        <td
+                            class="border-b border-slate-100 dark:border-slate-700 p-4 pr-8 text-slate-500 dark:text-slate-400">
+                            1961</td>
+                        <td
+                            class="border-b border-slate-100 dark:border-slate-700 p-4 pl-8 text-slate-500 dark:text-slate-400">
+                            The Sliding Mr. Bones (Next Stop, Pottersville)</td>
+                        <td
+                            class="border-b border-slate-100 dark:border-slate-700 p-4 pl-8 text-slate-500 dark:text-slate-400">
+                            The Sliding Mr. Bones (Next Stop, Pottersville)</td>
+                        <td
+                            class="border-b border-slate-100 dark:border-slate-700 p-4 pl-8 text-slate-500 dark:text-slate-400">
+                            The Sliding Mr. Bones (Next Stop, Pottersville)</td>
+                    </tr> -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+</body>
+
+<script>
+    const NetworkKey = "Network"
+    const network = localStorage.getItem(NetworkKey) || 'Mainnet'
+    document.getElementById("network").innerText = network
+    document.getElementById("network-item").innerText = network === 'Mainnet' ? "Chipnet" : "Mainnet"
+
+    function toggleNetwork() {
+        localStorage.setItem(NetworkKey, network === 'Mainnet' ? "Chipnet" : "Mainnet")
+        window.location.reload()
+    }
+</script>
+
+</html>

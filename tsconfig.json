@@ -1,0 +1,15 @@
+{
+    "extends": "@tsconfig/node19/tsconfig.json",
+    "compilerOptions": {
+      "module": "esnext",
+      "outDir": "./dist",
+      "resolveJsonModule": true
+    },
+    "include": ["src", "script/cli.ts"],
+    "exclude": ["node_modules"],
+    "ts-node": {
+      "esm": true,
+      "experimentalSpecifierResolution": "node",
+    }
+  }
+  

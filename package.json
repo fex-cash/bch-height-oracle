@@ -1,0 +1,29 @@
+{
+  "name": "bch-height-oracle",
+  "version": "0.0.1",
+  "description": "Block Height Oracle for Bitcoin Cash Smart Contracts",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "cashc": "cashc ./covenants/height_oracle.cash --output ./src/height_oracle.json",
+    "start:CHIPNET": "ts-node scripts/cli.ts update-height --network=CHIPNET  --token-category=9e19e9aa75926e9329e6f30a6634ee7ad3cc9cc166df6d34284c1e2b5b47eaf3 --receiver=? --exit=false",
+    "pm2:CHIPNET": "pm2 --name=bch-height-CHIPNET start npm -- run start:CHIPNET",
+    "start:MAINNET": "ts-node scripts/cli.ts update-height --network=MAINNET  --token-category=f10fe0965f4b7d1b9666783bbe25ec031a876b11997e812d27d534d127db1f32 --receiver=? --exit=false",
+    "pm2": "pm2 --name=bch-height-MAINNET start npm -- run start:MAINNET"
+  },
+  "devDependencies": {
+    "@tsconfig/node19": "^2.0.1",
+    "@types/jest": "^29.5.2",
+    "@types/node": "^20.2.1",
+    "@types/yargs": "^17.0.24",
+    "ts-node": "^10.9.1",
+    "yargs": "^17.7.2"
+  },
+  "author": "",
+  "license": "MIT License",
+  "dependencies": {
+    "cashc": "^0.9.1",
+    "cashscript": "^0.9.1",
+    "typescript": "^5.2.2"
+  }
+}
